@@ -105,11 +105,13 @@ prisma/
 - **Next 16 动态路由 `params` 是 Promise**：`const { id } = await params;`。
 - **数据页加 `export const dynamic = "force-dynamic"`**：避免构建期预渲染时执行数据库查询。
 - **AI SDK v6**：`useChat` 不再托管 input（自己管 + `sendMessage({text})`）；消息是 `parts` 数组；工具用 `tool({ inputSchema })`（不是 `parameters`）；服务端 `convertToModelMessages(messages)` + `result.toUIMessageStreamResponse()`。
-- 演示登录用户：`admin/admin123`、`inspector/123456`（`User` 表，目前未接入鉴权页面）。
+- **登录鉴权（轻量自建会话，无外部依赖）**：HMAC-SHA256 签名的 HttpOnly Cookie。`lib/auth.ts` 为 edge-safe 纯函数（Web Crypto，供 `middleware.ts` 与服务端共用，**勿在其中引入 `next/headers`/prisma**）；`lib/session.ts` 的 `getSession()` 用 `next/headers` 读当前用户；登录/登出在 `app/actions/auth.ts`；`middleware.ts` 拦截未登录访问。签名密钥读 `AUTH_SECRET`（缺省回退内置开发值）。
+- **三级角色**：`admin` 管理员 / `inspector` 监管执法员 / `viewer` 查询岗（只读）。写权限用 `canWrite(role)` 判定（admin/inspector 可写）；写操作**前端隐藏按钮 + Server Action 端二次校验**双重把关。
+- 演示登录用户：`admin/admin123`、`inspector/123456`、`viewer/123456`（均在 `User` 表）。
 
 ## 10. 后续可做（TODO）
 
-- [ ] 登录鉴权页面（Auth.js）+ 角色区分
+- [x] 登录鉴权 + 角色区分（已用轻量自建 Cookie 会话实现，见第 9 节；非 Auth.js）
 - [ ] 评级历史趋势图、台账导出 Excel/PDF
 - [ ] 分级监管：按等级自动生成抽查计划
 - [ ] 预警的"处置"操作闭环

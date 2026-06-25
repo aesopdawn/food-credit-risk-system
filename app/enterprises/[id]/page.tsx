@@ -1,6 +1,8 @@
 import { getEnterpriseDetail } from "@/lib/data";
 import EnterpriseDetailView from "@/components/EnterpriseDetailView";
 import { notFound } from "next/navigation";
+import { getSession } from "@/lib/session";
+import { canWrite } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +14,9 @@ export default async function EnterpriseDetailPage({
   const { id } = await params;
   const d = await getEnterpriseDetail(id);
   if (!d) notFound();
+
+  const user = await getSession();
+  const writable = canWrite(user?.role);
 
   // 从事件 payload(JSON 文本) 中提取备注，供编辑回填
   const remarkOf = (payload: string | null): string | undefined => {
@@ -60,5 +65,5 @@ export default async function EnterpriseDetailPage({
     alerts: d.alerts.map((a) => ({ id: a.id, level: a.level, reason: a.reason, status: a.status })),
   };
 
-  return <EnterpriseDetailView vm={vm} />;
+  return <EnterpriseDetailView vm={vm} canWrite={writable} />;
 }

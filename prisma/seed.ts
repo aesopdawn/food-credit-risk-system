@@ -58,6 +58,7 @@ async function main() {
     data: [
       { username: "admin", password: "admin123", name: "系统管理员", role: "admin" },
       { username: "inspector", password: "123456", name: "张监管", role: "inspector" },
+      { username: "viewer", password: "123456", name: "李查询", role: "viewer" },
     ],
   });
 

@@ -6,6 +6,15 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { reRateEnterprise } from "@/lib/rating";
+import { getSession } from "@/lib/session";
+import { canWrite } from "@/lib/auth";
+
+/** 写操作权限校验：viewer / 未登录返回拒绝结果，否则返回 null。 */
+async function denyIfReadOnly(): Promise<{ ok: false; error: string } | null> {
+  const user = await getSession();
+  if (!canWrite(user?.role)) return { ok: false, error: "无操作权限（当前为只读账号）" };
+  return null;
+}
 
 const NEGATIVE_TYPES = ["PENALTY", "INSPECTION", "COMPLAINT"] as const;
 
@@ -47,6 +56,8 @@ function toEventData(d: z.infer<typeof EventInput>) {
 }
 
 export async function addRiskEvent(raw: EventInputType): Promise<ActionResult> {
+  const denied = await denyIfReadOnly();
+  if (denied) return denied;
   const parsed = EventInput.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "参数有误" };
 
@@ -59,6 +70,8 @@ export async function addRiskEvent(raw: EventInputType): Promise<ActionResult> {
 }
 
 export async function updateRiskEvent(eventId: string, raw: EventInputType): Promise<ActionResult> {
+  const denied = await denyIfReadOnly();
+  if (denied) return denied;
   const parsed = EventInput.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "参数有误" };
 
@@ -69,6 +82,8 @@ export async function updateRiskEvent(eventId: string, raw: EventInputType): Pro
 }
 
 export async function deleteRiskEvent(eventId: string, enterpriseId: string): Promise<ActionResult> {
+  const denied = await denyIfReadOnly();
+  if (denied) return denied;
   await prisma.riskEvent.delete({ where: { id: eventId } });
   const result = await reRateEnterprise(enterpriseId);
   revalidate(enterpriseId);
@@ -77,6 +92,8 @@ export async function deleteRiskEvent(eventId: string, enterpriseId: string): Pr
 
 /** 手动触发一次重新评级（不改事件），用于"重新评级"按钮。 */
 export async function reRateAction(enterpriseId: string): Promise<ActionResult> {
+  const denied = await denyIfReadOnly();
+  if (denied) return denied;
   const result = await reRateEnterprise(enterpriseId);
   revalidate(enterpriseId);
   if (!result) return { ok: false, error: "企业不存在" };

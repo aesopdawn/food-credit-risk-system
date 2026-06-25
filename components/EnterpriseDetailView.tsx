@@ -48,7 +48,7 @@ type VM = {
   alerts: { id: string; level: string; reason: string; status: string }[];
 };
 
-export default function EnterpriseDetailView({ vm }: { vm: VM }) {
+export default function EnterpriseDetailView({ vm, canWrite }: { vm: VM; canWrite: boolean }) {
   const { message } = App.useApp();
   const [report, setReport] = useState<string>();
   const [loading, setLoading] = useState(false);
@@ -159,9 +159,11 @@ export default function EnterpriseDetailView({ vm }: { vm: VM }) {
             title="信用风险评级"
             style={{ marginBottom: 16 }}
             extra={
-              <Button size="small" icon={<ReloadOutlined />} loading={rerating} onClick={onReRate}>
-                重新评级
-              </Button>
+              canWrite ? (
+                <Button size="small" icon={<ReloadOutlined />} loading={rerating} onClick={onReRate}>
+                  重新评级
+                </Button>
+              ) : undefined
             }
           >
             <div style={{ textAlign: "center", marginBottom: 16 }}>
@@ -240,9 +242,13 @@ export default function EnterpriseDetailView({ vm }: { vm: VM }) {
           <Card
             title={`涉企风险事件（${vm.events.length} 条）`}
             extra={
-              <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openAdd}>
-                录入事件
-              </Button>
+              canWrite ? (
+                <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openAdd}>
+                  录入事件
+                </Button>
+              ) : (
+                <Tag>只读</Tag>
+              )
             }
           >
             {vm.events.length === 0 ? (
@@ -261,23 +267,25 @@ export default function EnterpriseDetailView({ vm }: { vm: VM }) {
                             <Text strong>{e.title}</Text>
                             {e.isVeto && <Tag color="red">一票否决</Tag>}
                           </Space>
-                          <Space size={0}>
-                            <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(e)}>
-                              编辑
-                            </Button>
-                            <Popconfirm
-                              title="删除该事件？"
-                              description="删除后将自动重新评级"
-                              okText="删除"
-                              cancelText="取消"
-                              okButtonProps={{ danger: true }}
-                              onConfirm={() => onDelete(e.id)}
-                            >
-                              <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-                                删除
+                          {canWrite && (
+                            <Space size={0}>
+                              <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(e)}>
+                                编辑
                               </Button>
-                            </Popconfirm>
-                          </Space>
+                              <Popconfirm
+                                title="删除该事件？"
+                                description="删除后将自动重新评级"
+                                okText="删除"
+                                cancelText="取消"
+                                okButtonProps={{ danger: true }}
+                                onConfirm={() => onDelete(e.id)}
+                              >
+                                <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+                                  删除
+                                </Button>
+                              </Popconfirm>
+                            </Space>
+                          )}
                         </div>
                         <div style={{ color: "#999", fontSize: 12, marginTop: 2 }}>
                           严重度 {e.severity} · {e.occurredAt} · 来源：{e.source}

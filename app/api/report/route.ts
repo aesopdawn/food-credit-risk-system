@@ -1,11 +1,13 @@
 import { deepseek } from "@ai-sdk/deepseek";
 import { generateText } from "ai";
 import { getEnterpriseDetail } from "@/lib/data";
+import { getSession } from "@/lib/session";
 
 export const maxDuration = 60;
 
 // AI 智能研判：基于企业数据生成一份信用风险研判报告（非流式）
 export async function POST(req: Request) {
+  if (!(await getSession())) return Response.json({ error: "未登录" }, { status: 401 });
   const { id } = await req.json();
   const d = await getEnterpriseDetail(id);
   if (!d) return Response.json({ error: "企业不存在" }, { status: 404 });
