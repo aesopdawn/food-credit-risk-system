@@ -30,8 +30,15 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env 文件：提交 .env(仅含非密钥 DATABASE_URL) 与 .env.example；忽略含密钥的 .env.local
+.env.local
+.env*.local
+
+# 本地 SQLite 数据库（用 `npx prisma migrate dev` + `npm run seed` 重建）
+/dev.db
+/dev.db-journal
+/dev.db-shm
+/dev.db-wal
 
 # vercel
 .vercel
@@ -39,3 +46,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Prisma 生成的客户端（postinstall 时由 `prisma generate` 重新生成）
+/lib/generated/prisma
