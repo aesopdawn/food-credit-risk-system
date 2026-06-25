@@ -1,10 +1,13 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, Descriptions, Tag, Row, Col, Progress, Timeline, Button, Typography, Alert, Space, List, Popconfirm, App } from "antd";
 import { RobotOutlined, SafetyCertificateOutlined, PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { LEVEL_META, type RiskLevel, type ScoreResult } from "@/lib/scoring";
 import { deleteRiskEvent, reRateAction } from "@/app/actions/events";
+import { deleteEnterprise } from "@/app/actions/enterprises";
 import RiskEventFormModal, { type EditingEvent } from "./RiskEventFormModal";
+import EnterpriseFormModal, { type EnterpriseFormInitial } from "./EnterpriseFormModal";
 import EChart from "./EChart";
 
 const { Paragraph, Text } = Typography;
@@ -48,14 +51,39 @@ type VM = {
   alerts: { id: string; level: string; reason: string; status: string }[];
 };
 
-export default function EnterpriseDetailView({ vm, canWrite }: { vm: VM; canWrite: boolean }) {
+export default function EnterpriseDetailView({ vm, canWrite, canDelete }: { vm: VM; canWrite: boolean; canDelete: boolean }) {
   const { message } = App.useApp();
+  const router = useRouter();
   const [report, setReport] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [rerating, setRerating] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<EditingEvent | null>(null);
+  const [editEntOpen, setEditEntOpen] = useState(false);
   const meta = LEVEL_META[vm.level as RiskLevel];
+
+  const enterpriseInitial: EnterpriseFormInitial = {
+    id: vm.id,
+    name: vm.name,
+    uscc: vm.uscc,
+    legalPerson: vm.legalPerson,
+    registeredCapital: vm.registeredCapital,
+    establishedAt: vm.establishedAt,
+    industry: vm.industry,
+    region: vm.region,
+    businessScope: vm.businessScope,
+    status: vm.status,
+  };
+
+  const onDeleteEnterprise = async () => {
+    const res = await deleteEnterprise(vm.id);
+    if (res.ok) {
+      message.success("企业已删除");
+      router.push("/enterprises");
+    } else {
+      message.error(res.error);
+    }
+  };
 
   const genReport = async () => {
     setLoading(true);
@@ -136,9 +164,36 @@ export default function EnterpriseDetailView({ vm, canWrite }: { vm: VM; canWrit
 
   return (
     <div>
-      <Card style={{ marginBottom: 16 }}>
+      <Card
+        title={vm.name}
+        style={{ marginBottom: 16 }}
+        extra={
+          canWrite || canDelete ? (
+            <Space>
+              {canWrite && (
+                <Button size="small" icon={<EditOutlined />} onClick={() => setEditEntOpen(true)}>
+                  编辑档案
+                </Button>
+              )}
+              {canDelete && (
+                <Popconfirm
+                  title="删除该企业？"
+                  description="将同时删除其全部事件、评级与预警，且不可恢复"
+                  okText="删除"
+                  cancelText="取消"
+                  okButtonProps={{ danger: true }}
+                  onConfirm={onDeleteEnterprise}
+                >
+                  <Button size="small" danger icon={<DeleteOutlined />}>
+                    删除企业
+                  </Button>
+                </Popconfirm>
+              )}
+            </Space>
+          ) : undefined
+        }
+      >
         <Descriptions
-          title={vm.name}
           column={{ xs: 1, sm: 2, md: 3 }}
           items={[
             { key: "uscc", label: "统一社会信用代码", children: vm.uscc },
@@ -302,6 +357,7 @@ export default function EnterpriseDetailView({ vm, canWrite }: { vm: VM; canWrit
       </Row>
 
       <RiskEventFormModal open={modalOpen} enterpriseId={vm.id} editing={editing} onClose={() => setModalOpen(false)} />
+      <EnterpriseFormModal open={editEntOpen} mode="edit" initial={enterpriseInitial} onClose={() => setEditEntOpen(false)} />
     </div>
   );
 }

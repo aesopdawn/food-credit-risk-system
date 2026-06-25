@@ -1,20 +1,23 @@
 "use client";
 import { useMemo, useState } from "react";
-import { Card, Table, Tag, Select, Input, Space } from "antd";
+import { Card, Table, Tag, Select, Input, Space, Button } from "antd";
+import { PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import Link from "next/link";
 import { LEVEL_META, type RiskLevel } from "@/lib/scoring";
 import type { EnterpriseListItem } from "@/lib/data";
+import EnterpriseFormModal from "./EnterpriseFormModal";
 
 const levelTag = (level: string) => {
   const meta = LEVEL_META[level as RiskLevel];
   return meta ? <Tag color={meta.color}>{level} 级</Tag> : <Tag>{level}</Tag>;
 };
 
-export default function EnterpriseTable({ data }: { data: EnterpriseListItem[] }) {
+export default function EnterpriseTable({ data, canWrite }: { data: EnterpriseListItem[]; canWrite: boolean }) {
   const [level, setLevel] = useState<string>();
   const [industry, setIndustry] = useState<string>();
   const [keyword, setKeyword] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
 
   const industries = useMemo(() => Array.from(new Set(data.map((d) => d.industry))), [data]);
 
@@ -62,38 +65,51 @@ export default function EnterpriseTable({ data }: { data: EnterpriseListItem[] }
   ];
 
   return (
-    <Card title={`企业信用名录（共 ${filtered.length} 家）`}>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Select
-          allowClear
-          placeholder="信用等级"
-          style={{ width: 130 }}
-          value={level}
-          onChange={setLevel}
-          options={(["A", "B", "C", "D"] as const).map((l) => ({ value: l, label: `${l} 级` }))}
+    <>
+      <Card
+        title={`企业信用名录（共 ${filtered.length} 家）`}
+        extra={
+          canWrite ? (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+              新增企业
+            </Button>
+          ) : undefined
+        }
+      >
+        <Space style={{ marginBottom: 16 }} wrap>
+          <Select
+            allowClear
+            placeholder="信用等级"
+            style={{ width: 130 }}
+            value={level}
+            onChange={setLevel}
+            options={(["A", "B", "C", "D"] as const).map((l) => ({ value: l, label: `${l} 级` }))}
+          />
+          <Select
+            allowClear
+            placeholder="行业"
+            style={{ width: 150 }}
+            value={industry}
+            onChange={setIndustry}
+            options={industries.map((i) => ({ value: i, label: i }))}
+          />
+          <Input.Search
+            placeholder="搜索企业名称 / 信用代码"
+            style={{ width: 260 }}
+            allowClear
+            onChange={(e) => setKeyword(e.target.value)}
+          />
+        </Space>
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={filtered}
+          pagination={{ pageSize: 12, showSizeChanger: false }}
+          size="middle"
         />
-        <Select
-          allowClear
-          placeholder="行业"
-          style={{ width: 150 }}
-          value={industry}
-          onChange={setIndustry}
-          options={industries.map((i) => ({ value: i, label: i }))}
-        />
-        <Input.Search
-          placeholder="搜索企业名称 / 信用代码"
-          style={{ width: 260 }}
-          allowClear
-          onChange={(e) => setKeyword(e.target.value)}
-        />
-      </Space>
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={filtered}
-        pagination={{ pageSize: 12, showSizeChanger: false }}
-        size="middle"
-      />
-    </Card>
+      </Card>
+
+      <EnterpriseFormModal open={createOpen} mode="create" onClose={() => setCreateOpen(false)} />
+    </>
   );
 }
