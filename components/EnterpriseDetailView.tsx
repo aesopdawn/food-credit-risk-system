@@ -1,10 +1,13 @@
 "use client";
 import { useState } from "react";
-import { Card, Descriptions, Tag, Row, Col, Progress, Timeline, Button, Typography, Alert, Space, List } from "antd";
-import { RobotOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { Card, Descriptions, Tag, Row, Col, Progress, Timeline, Button, Typography, Alert, Space, List, Popconfirm, App } from "antd";
+import { RobotOutlined, SafetyCertificateOutlined, PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { LEVEL_META, type RiskLevel, type ScoreResult } from "@/lib/scoring";
+import { deleteRiskEvent, reRateAction } from "@/app/actions/events";
+import RiskEventFormModal, { type EditingEvent } from "./RiskEventFormModal";
+import EChart from "./EChart";
 
-const { Paragraph, Title, Text } = Typography;
+const { Paragraph, Text } = Typography;
 
 const EVENT_META: Record<string, { label: string; color: string }> = {
   PENALTY: { label: "行政处罚", color: "red" },
@@ -12,6 +15,17 @@ const EVENT_META: Record<string, { label: string; color: string }> = {
   COMPLAINT: { label: "投诉举报", color: "volcano" },
   REPAIR: { label: "信用修复", color: "green" },
   LICENSE: { label: "许可资质", color: "blue" },
+};
+
+type EventVM = {
+  id: string;
+  type: string;
+  title: string;
+  severity: number;
+  isVeto: boolean;
+  source: string;
+  occurredAt: string;
+  remark?: string;
 };
 
 type VM = {
@@ -29,13 +43,18 @@ type VM = {
   score: number | null;
   computedAt: string | null;
   breakdown: ScoreResult | null;
-  events: { id: string; type: string; title: string; severity: number; isVeto: boolean; source: string; occurredAt: string }[];
+  events: EventVM[];
+  ratingHistory: { computedAt: string; score: number; level: string }[];
   alerts: { id: string; level: string; reason: string; status: string }[];
 };
 
 export default function EnterpriseDetailView({ vm }: { vm: VM }) {
+  const { message } = App.useApp();
   const [report, setReport] = useState<string>();
   const [loading, setLoading] = useState(false);
+  const [rerating, setRerating] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<EditingEvent | null>(null);
   const meta = LEVEL_META[vm.level as RiskLevel];
 
   const genReport = async () => {
@@ -54,6 +73,65 @@ export default function EnterpriseDetailView({ vm }: { vm: VM }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const openAdd = () => {
+    setEditing(null);
+    setModalOpen(true);
+  };
+  const openEdit = (e: EventVM) => {
+    setEditing({
+      id: e.id,
+      type: e.type,
+      title: e.title,
+      severity: e.severity,
+      isVeto: e.isVeto,
+      source: e.source,
+      occurredAt: e.occurredAt,
+      remark: e.remark,
+    });
+    setModalOpen(true);
+  };
+  const onDelete = async (id: string) => {
+    const res = await deleteRiskEvent(id, vm.id);
+    if (res.ok) message.success(`已删除事件，最新评级：${res.level} 级（${res.score} 分）`);
+    else message.error(res.error);
+  };
+  const onReRate = async () => {
+    setRerating(true);
+    const res = await reRateAction(vm.id);
+    setRerating(false);
+    if (res.ok) message.success(`已重新评级：${res.level} 级（${res.score} 分）`);
+    else message.error(res.error);
+  };
+
+  const trendOption = {
+    tooltip: { trigger: "axis" },
+    grid: { left: 40, right: 16, top: 24, bottom: 28 },
+    xAxis: { type: "category", data: vm.ratingHistory.map((r) => r.computedAt) },
+    yAxis: { type: "value", min: 0, max: 100 },
+    series: [
+      {
+        name: "综合得分",
+        type: "line",
+        smooth: true,
+        symbolSize: 7,
+        data: vm.ratingHistory.map((r) => r.score),
+        areaStyle: { opacity: 0.12 },
+        lineStyle: { color: "#1677ff" },
+        itemStyle: { color: "#1677ff" },
+        markLine: {
+          silent: true,
+          symbol: "none",
+          lineStyle: { type: "dashed", color: "#bbb" },
+          data: [
+            { yAxis: 85, label: { formatter: "A 85" } },
+            { yAxis: 70, label: { formatter: "B 70" } },
+            { yAxis: 60, label: { formatter: "C 60" } },
+          ],
+        },
+      },
+    ],
   };
 
   return (
@@ -77,7 +155,15 @@ export default function EnterpriseDetailView({ vm }: { vm: VM }) {
 
       <Row gutter={16}>
         <Col xs={24} md={9}>
-          <Card title="信用风险评级" style={{ marginBottom: 16 }}>
+          <Card
+            title="信用风险评级"
+            style={{ marginBottom: 16 }}
+            extra={
+              <Button size="small" icon={<ReloadOutlined />} loading={rerating} onClick={onReRate}>
+                重新评级
+              </Button>
+            }
+          >
             <div style={{ textAlign: "center", marginBottom: 16 }}>
               <Tag color={meta?.color} style={{ fontSize: 22, padding: "8px 20px", borderRadius: 8 }}>
                 {vm.level} 级
@@ -110,7 +196,7 @@ export default function EnterpriseDetailView({ vm }: { vm: VM }) {
           </Card>
 
           {vm.breakdown && (
-            <Card title="各维度得分明细" size="small">
+            <Card title="各维度得分明细" size="small" style={{ marginBottom: 16 }}>
               {vm.breakdown.breakdown.map((dim) => (
                 <div key={dim.key} style={{ marginBottom: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -137,6 +223,12 @@ export default function EnterpriseDetailView({ vm }: { vm: VM }) {
               ))}
             </Card>
           )}
+
+          {vm.ratingHistory.length > 0 && (
+            <Card title="评级走势" size="small">
+              <EChart option={trendOption} height={220} />
+            </Card>
+          )}
         </Col>
 
         <Col xs={24} md={15}>
@@ -145,9 +237,16 @@ export default function EnterpriseDetailView({ vm }: { vm: VM }) {
               <List size="small" dataSource={vm.breakdown.topRisks} renderItem={(t) => <List.Item>{t}</List.Item>} />
             </Card>
           )}
-          <Card title={`涉企风险事件（${vm.events.length} 条）`}>
+          <Card
+            title={`涉企风险事件（${vm.events.length} 条）`}
+            extra={
+              <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openAdd}>
+                录入事件
+              </Button>
+            }
+          >
             {vm.events.length === 0 ? (
-              <Text type="secondary">暂无风险事件</Text>
+              <Text type="secondary">暂无风险事件，可点击右上角「录入事件」添加</Text>
             ) : (
               <Timeline
                 items={vm.events.map((e) => {
@@ -156,14 +255,34 @@ export default function EnterpriseDetailView({ vm }: { vm: VM }) {
                     color: m.color,
                     children: (
                       <div>
-                        <Space>
-                          <Tag color={m.color}>{m.label}</Tag>
-                          <Text strong>{e.title}</Text>
-                          {e.isVeto && <Tag color="red">一票否决</Tag>}
-                        </Space>
-                        <div style={{ color: "#999", fontSize: 12, marginTop: 4 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                          <Space wrap>
+                            <Tag color={m.color}>{m.label}</Tag>
+                            <Text strong>{e.title}</Text>
+                            {e.isVeto && <Tag color="red">一票否决</Tag>}
+                          </Space>
+                          <Space size={0}>
+                            <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(e)}>
+                              编辑
+                            </Button>
+                            <Popconfirm
+                              title="删除该事件？"
+                              description="删除后将自动重新评级"
+                              okText="删除"
+                              cancelText="取消"
+                              okButtonProps={{ danger: true }}
+                              onConfirm={() => onDelete(e.id)}
+                            >
+                              <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+                                删除
+                              </Button>
+                            </Popconfirm>
+                          </Space>
+                        </div>
+                        <div style={{ color: "#999", fontSize: 12, marginTop: 2 }}>
                           严重度 {e.severity} · {e.occurredAt} · 来源：{e.source}
                         </div>
+                        {e.remark && <div style={{ color: "#666", fontSize: 12, marginTop: 2 }}>备注：{e.remark}</div>}
                       </div>
                     ),
                   };
@@ -173,6 +292,8 @@ export default function EnterpriseDetailView({ vm }: { vm: VM }) {
           </Card>
         </Col>
       </Row>
+
+      <RiskEventFormModal open={modalOpen} enterpriseId={vm.id} editing={editing} onClose={() => setModalOpen(false)} />
     </div>
   );
 }

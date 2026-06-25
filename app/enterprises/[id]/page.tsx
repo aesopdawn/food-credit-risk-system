@@ -13,6 +13,16 @@ export default async function EnterpriseDetailPage({
   const d = await getEnterpriseDetail(id);
   if (!d) notFound();
 
+  // 从事件 payload(JSON 文本) 中提取备注，供编辑回填
+  const remarkOf = (payload: string | null): string | undefined => {
+    if (!payload) return undefined;
+    try {
+      return (JSON.parse(payload) as { 备注?: string }).备注;
+    } catch {
+      return undefined;
+    }
+  };
+
   // 构造可序列化的视图模型传给客户端组件
   const vm = {
     id: d.id,
@@ -37,7 +47,16 @@ export default async function EnterpriseDetailPage({
       isVeto: e.isVeto,
       source: e.source,
       occurredAt: new Date(e.occurredAt).toISOString().slice(0, 10),
+      remark: remarkOf(e.payload),
     })),
+    // 评级历史（升序），用于评级走势图；保留 level 以便着色/提示
+    ratingHistory: [...d.ratings]
+      .reverse()
+      .map((r) => ({
+        computedAt: new Date(r.computedAt).toISOString().slice(0, 10),
+        score: r.score,
+        level: r.level,
+      })),
     alerts: d.alerts.map((a) => ({ id: a.id, level: a.level, reason: a.reason, status: a.status })),
   };
 

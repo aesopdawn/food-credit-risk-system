@@ -49,3 +49,6 @@ next-env.d.ts
 
 # Prisma 生成的客户端（postinstall 时由 `prisma generate` 重新生成）
 /lib/generated/prisma
+
+# Claude Code 本地个人设置（权限等，因人而异，不提交）
+.claude/settings.local.json
