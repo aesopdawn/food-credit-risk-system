@@ -1,0 +1,92 @@
+// 食品企业信用风险分类管理系统 — 数据模型
+// 文档与约定见根目录 CLAUDE.md
+// 注意：SQLite 无 JSONB，JSON 明细字段用 String 存储 JSON 文本，应用层用 JSON.parse 解析。
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// 企业基础档案
+model Enterprise {
+  id                String   @id @default(cuid())
+  name              String // 企业名称
+  uscc              String   @unique // 统一社会信用代码
+  legalPerson       String // 法定代表人
+  registeredCapital Float // 注册资本(万元)
+  establishedAt     DateTime // 成立日期
+  industry          String // 行业：食品生产 / 食品销售 / 餐饮服务 / 食品添加剂
+  region            String // 所在区县
+  businessScope     String // 经营范围
+  status            String   @default("在营") // 经营状态：在营 / 注销 / 吊销
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  events  RiskEvent[]
+  ratings RatingRecord[]
+  alerts  Alert[]
+
+  @@index([industry])
+  @@index([region])
+}
+
+/// 涉企风险事件（统一事件表，评分引擎的唯一数据源）
+model RiskEvent {
+  id           String     @id @default(cuid())
+  enterpriseId String
+  enterprise   Enterprise @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
+  type         String // PENALTY 行政处罚 / INSPECTION 抽查检查 / COMPLAINT 投诉举报 / REPAIR 信用修复 / LICENSE 许可资质
+  title        String // 事件标题/事由
+  severity     Int // 严重程度 1-5
+  isVeto       Boolean    @default(false) // 一票否决（严重食品安全事故 → 直接 D 级）
+  occurredAt   DateTime // 事件发生时间
+  source       String // 数据来源
+  payload      String? // 明细数据(JSON 文本)
+  createdAt    DateTime   @default(now())
+
+  @@index([enterpriseId])
+  @@index([type])
+  @@index([occurredAt])
+}
+
+/// 评级记录（每次评级一条，保留历史，便于趋势与台账）
+model RatingRecord {
+  id           String     @id @default(cuid())
+  enterpriseId String
+  enterprise   Enterprise @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
+  score        Float // 综合得分 0-100
+  level        String // A / B / C / D
+  breakdown    String // 各维度得分明细(JSON 文本)，用于"为什么是这个等级"
+  computedAt   DateTime   @default(now())
+
+  @@index([enterpriseId])
+  @@index([computedAt])
+}
+
+/// 风险预警
+model Alert {
+  id           String     @id @default(cuid())
+  enterpriseId String
+  enterprise   Enterprise @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
+  level        String // 预警级别：高 / 中 / 低
+  reason       String // 预警原因
+  status       String     @default("待处置") // 待处置 / 已处置
+  createdAt    DateTime   @default(now())
+
+  @@index([enterpriseId])
+  @@index([status])
+}
+
+/// 系统用户
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String // 演示用途，简单存储
+  name      String
+  role      String   @default("inspector") // inspector 监管员 / admin 管理员
+  createdAt DateTime @default(now())
+}
