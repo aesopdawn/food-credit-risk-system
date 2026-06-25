@@ -57,25 +57,33 @@ npx prisma studio    # 可视化查看数据库
 
 ```
 app/
-  layout.tsx              根布局：AntdRegistry + AppShell
+  layout.tsx              根布局：getSession() 取当前用户 → AntdRegistry + AppShell
   page.tsx                监管总览（服务端取数 → DashboardView）
+  login/page.tsx          登录页（未登录由 middleware 跳转至此 → LoginForm）
   enterprises/
-    page.tsx              企业名录（→ EnterpriseTable）
-    [id]/page.tsx         企业详情（async params → EnterpriseDetailView）
+    page.tsx              企业名录（→ EnterpriseTable，传 canWrite）
+    [id]/page.tsx         企业详情（async params → EnterpriseDetailView，传 canWrite/canDelete）
   alerts/page.tsx         风险预警（→ AlertsView）
+  actions/                ⭐ Server Actions（前后端不分离的"写"入口，写后 revalidatePath）
+    auth.ts               登录 / 登出
+    events.ts             涉企事件增删改 + 重新评级（写操作校验 canWrite）
+    enterprises.ts        企业档案增删改（建档/改状态自动重评级；删除校验 isAdmin）
   api/
-    chat/route.ts         AI 对话 Agent（流式 + 工具调用）
-    report/route.ts       AI 研判报告（非流式 generateText）
-  generated/              （未用，prisma 客户端实际生成到 lib/generated）
-components/               全部为 'use client' 视图组件 + 图表 + 对话窗
+    chat/route.ts         AI 对话 Agent（流式 + 工具调用；入口校验登录）
+    report/route.ts       AI 研判报告（非流式 generateText；入口校验登录）
+middleware.ts             路由保护：未登录跳 /login（用 lib/auth 验签，edge 运行）
+components/               全部 'use client'：视图 + 图表(EChart) + 表单弹窗 + 对话窗(ChatWidget)
 lib/
   db.ts                  Prisma client 单例（driver adapter）
   scoring.ts             ⭐ 评分引擎（纯函数、确定性、可解释）
-  data.ts                服务端数据访问层（页面与 AI 工具共用）
+  rating.ts              重新评级：跑引擎 → 落 RatingRecord → 联动预警（任何增删改后调用）
+  data.ts                服务端数据访问层（读；页面与 AI 工具共用）
+  auth.ts                ⭐ edge-safe 鉴权纯函数（HMAC 签名 Cookie、角色判定 canWrite/isAdmin）
+  session.ts             getSession() / requireUser()（用 next/headers 读当前用户）
   generated/prisma/      Prisma 生成的客户端（gitignore，postinstall 重建）
 prisma/
-  schema.prisma          数据模型
-  seed.ts                模拟数据生成
+  schema.prisma          数据模型（Enterprise / RiskEvent / RatingRecord / Alert / User）
+  seed.ts                模拟数据生成（80 家企业 + 3 个演示账号）
   migrations/            迁移文件
 ```
 
@@ -98,6 +106,8 @@ prisma/
 1. **对话 Agent**（`app/api/chat/route.ts`）：`streamText` + 工具调用，`stopWhen: stepCountIs(6)`。工具：`listEnterprises` / `getEnterpriseProfile` / `explainRating` / `getStatistics`，全部查真实数据库再作答。前端 `components/ChatWidget.tsx` 用 `useChat` + `DefaultChatTransport`。
 2. **研判报告**（`app/api/report/route.ts`）：`generateText` 基于企业数据生成自然语言研判报告。
 
+> 两个 AI 路由入口都先 `getSession()` 校验登录，未登录返回 401（避免未授权调用消耗 DeepSeek 配额）。
+
 ## 9. 关键约定 / 易错点（务必遵守）
 
 - **antd 只在 `'use client'` 组件里用**。页面（服务端组件）只负责取数，再传给客户端视图组件——直接在服务端组件用 antd 会因 client-only hooks 报错。
@@ -105,14 +115,18 @@ prisma/
 - **Next 16 动态路由 `params` 是 Promise**：`const { id } = await params;`。
 - **数据页加 `export const dynamic = "force-dynamic"`**：避免构建期预渲染时执行数据库查询。
 - **AI SDK v6**：`useChat` 不再托管 input（自己管 + `sendMessage({text})`）；消息是 `parts` 数组；工具用 `tool({ inputSchema })`（不是 `parameters`）；服务端 `convertToModelMessages(messages)` + `result.toUIMessageStreamResponse()`。
+- **写操作走 Server Actions**（`app/actions/*`，`"use server"`）：客户端组件直接调用 → 写库 → `revalidatePath` 让总览/名录/预警/详情自动刷新（无需手动 `router.refresh()`）。涉企事件 / 企业的任何增删改后都调用 `reRateEnterprise()` 自动重新评级。antd 6 弹窗用 cssinjs class 控制显隐（**不是** inline `display`），自动化检测可见性时注意。
 - **登录鉴权（轻量自建会话，无外部依赖）**：HMAC-SHA256 签名的 HttpOnly Cookie。`lib/auth.ts` 为 edge-safe 纯函数（Web Crypto，供 `middleware.ts` 与服务端共用，**勿在其中引入 `next/headers`/prisma**）；`lib/session.ts` 的 `getSession()` 用 `next/headers` 读当前用户；登录/登出在 `app/actions/auth.ts`；`middleware.ts` 拦截未登录访问。签名密钥读 `AUTH_SECRET`（缺省回退内置开发值）。
 - **三级角色**：`admin` 管理员 / `inspector` 监管执法员 / `viewer` 查询岗（只读）。写权限用 `canWrite(role)` 判定（admin/inspector 可写）；写操作**前端隐藏按钮 + Server Action 端二次校验**双重把关。
 - 演示登录用户：`admin/admin123`、`inspector/123456`、`viewer/123456`（均在 `User` 表）。
 
 ## 10. 后续可做（TODO）
 
-- [x] 登录鉴权 + 角色区分（已用轻量自建 Cookie 会话实现，见第 9 节；非 Auth.js）
-- [ ] 评级历史趋势图、台账导出 Excel/PDF
+- [x] 涉企事件增删改 + 自动重新评级（`app/actions/events.ts` + `lib/rating.ts`）
+- [x] 企业档案增删改（CRUD）+ 建档自动初始评级（`app/actions/enterprises.ts`）
+- [x] 登录鉴权 + 三级角色区分（轻量自建 Cookie 会话，见第 9 节；非 Auth.js）
+- [x] 评级历史趋势图（企业详情页"评级走势"，ECharts）
+- [ ] 台账导出 Excel / PDF
 - [ ] 分级监管：按等级自动生成抽查计划
-- [ ] 预警的"处置"操作闭环
-- [ ] 切换数据库到云端 Postgres（改 `schema.prisma` provider + adapter）
+- [ ] 预警的"处置"操作闭环（目前预警仅生成，无人工处置改状态入口）
+- [ ] 切换数据库到云端 Postgres（改 `schema.prisma` provider + adapter；可让团队共享数据）
