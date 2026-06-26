@@ -77,6 +77,12 @@ model Alert {
   status       String     @default("待处置") // 待处置 / 已处置
   createdAt    DateTime   @default(now())
 
+  // —— 处置闭环字段（待处置 → 已处置）——
+  dispositionType String? // 处置方式：现场核查 / 责令整改 / 约谈告诫 / 督促信用修复 / 记录归档 / 系统自动核销
+  disposition     String? // 处置说明 / 处置结果
+  handledBy       String? // 处置人（执法员姓名；自动核销为"系统"）
+  handledAt       DateTime? // 处置时间
+
   @@index([enterpriseId])
   @@index([status])
 }

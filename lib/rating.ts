@@ -41,13 +41,31 @@ export async function reRateEnterprise(enterpriseId: string): Promise<ScoreResul
 }
 
 /**
- * 预警联动：评级落到 C / D（或一票否决）时，若当前没有对应级别的"待处置"预警，
- * 则自动生成一条，做到"早提醒"。等级回升不在此自动销警（销警属人工"处置"动作，
- * 见预警处置闭环），避免误销与重复建警。
+ * 预警联动（业务闭环的"自动"半边）：
+ * - 评级落到 C / D（或一票否决）时，若无对应级别的"待处置"预警，则自动建警"早提醒"；
+ * - 评级回升至 A / B（风险已消除）时，把残留的"待处置"预警自动核销（标记为系统处置），
+ *   避免风险已消失的预警长期挂账。人工处置仍走 disposeAlert（见 app/actions/alerts.ts）。
  */
 async function syncAlert(enterpriseId: string, result: ScoreResult) {
   const open = await prisma.alert.findMany({ where: { enterpriseId, status: "待处置" } });
   const hasOpen = (lv: string) => open.some((a) => a.level === lv);
+
+  // 风险已消除：评级回升至 A/B 且无一票否决 → 自动核销全部待处置预警
+  if (!result.veto && (result.level === "A" || result.level === "B")) {
+    if (open.length > 0) {
+      await prisma.alert.updateMany({
+        where: { enterpriseId, status: "待处置" },
+        data: {
+          status: "已处置",
+          dispositionType: "系统自动核销",
+          disposition: `企业信用评级已回升至 ${result.level} 级（${result.score}分），风险消除，系统自动核销`,
+          handledBy: "系统",
+          handledAt: new Date(),
+        },
+      });
+    }
+    return;
+  }
 
   if (result.veto || result.level === "D") {
     if (!hasOpen("高")) {

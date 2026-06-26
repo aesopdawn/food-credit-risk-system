@@ -68,6 +68,7 @@ app/
     auth.ts               登录 / 登出
     events.ts             涉企事件增删改 + 重新评级（写操作校验 canWrite）
     enterprises.ts        企业档案增删改（建档/改状态自动重评级；删除校验 isAdmin）
+    alerts.ts             ⭐ 预警处置闭环（销警留痕 + 可选写回监管措施事件→重评级；校验 canWrite）
   api/
     chat/route.ts         AI 对话 Agent（流式 + 工具调用；入口校验登录）
     report/route.ts       AI 研判报告（非流式 generateText；入口校验登录）
@@ -126,7 +127,7 @@ prisma/
 - [x] 企业档案增删改（CRUD）+ 建档自动初始评级（`app/actions/enterprises.ts`）
 - [x] 登录鉴权 + 三级角色区分（轻量自建 Cookie 会话，见第 9 节；非 Auth.js）
 - [x] 评级历史趋势图（企业详情页"评级走势"，ECharts）
+- [x] 预警处置闭环（`app/actions/alerts.ts`）：执法员处置销警留痕（处置方式/措施/处置人/时间）+ 可选写回监管措施事件→自动重评级；评级回升至 A/B 时系统自动核销残留预警。至此「采集→评级→预警→处置→措施回写→再评级」完整闭环。
 - [ ] 台账导出 Excel / PDF
-- [ ] 分级监管：按等级自动生成抽查计划
-- [ ] 预警的"处置"操作闭环（目前预警仅生成，无人工处置改状态入口）
+- [ ] 分级监管：按等级自动生成抽查计划（评级→主动派活的"前置"闭环，目前靠人工录事件触发）
 - [ ] 切换数据库到云端 Postgres（改 `schema.prisma` provider + adapter；可让团队共享数据）

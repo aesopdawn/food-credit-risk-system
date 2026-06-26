@@ -8,6 +8,7 @@ import { deleteRiskEvent, reRateAction } from "@/app/actions/events";
 import { deleteEnterprise } from "@/app/actions/enterprises";
 import RiskEventFormModal, { type EditingEvent } from "./RiskEventFormModal";
 import EnterpriseFormModal, { type EnterpriseFormInitial } from "./EnterpriseFormModal";
+import AlertDisposeModal, { type DisposingAlert } from "./AlertDisposeModal";
 import EChart from "./EChart";
 
 const { Paragraph, Text } = Typography;
@@ -19,6 +20,8 @@ const EVENT_META: Record<string, { label: string; color: string }> = {
   REPAIR: { label: "信用修复", color: "green" },
   LICENSE: { label: "许可资质", color: "blue" },
 };
+
+const ALERT_LEVEL_COLOR: Record<string, string> = { 高: "red", 中: "orange", 低: "blue" };
 
 type EventVM = {
   id: string;
@@ -60,7 +63,9 @@ export default function EnterpriseDetailView({ vm, canWrite, canDelete }: { vm: 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<EditingEvent | null>(null);
   const [editEntOpen, setEditEntOpen] = useState(false);
+  const [disposingAlert, setDisposingAlert] = useState<DisposingAlert | null>(null);
   const meta = LEVEL_META[vm.level as RiskLevel];
+  const openAlerts = vm.alerts.filter((a) => a.status === "待处置");
 
   const enterpriseInitial: EnterpriseFormInitial = {
     id: vm.id,
@@ -259,7 +264,7 @@ export default function EnterpriseDetailView({ vm, canWrite, canDelete }: { vm: 
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span>{dim.name}</span>
                     <span>
-                      {dim.score} / {dim.full}
+                      {Math.round(dim.score * 10) / 10} / {dim.full}
                     </span>
                   </div>
                   <Progress
@@ -292,6 +297,41 @@ export default function EnterpriseDetailView({ vm, canWrite, canDelete }: { vm: 
           {vm.breakdown && vm.breakdown.topRisks.length > 0 && (
             <Card title="主要风险因素" size="small" style={{ marginBottom: 16 }}>
               <List size="small" dataSource={vm.breakdown.topRisks} renderItem={(t) => <List.Item>{t}</List.Item>} />
+            </Card>
+          )}
+          {vm.alerts.length > 0 && (
+            <Card title={`风险预警（待处置 ${openAlerts.length} 条）`} size="small" style={{ marginBottom: 16 }}>
+              <List
+                size="small"
+                dataSource={vm.alerts}
+                renderItem={(a) => (
+                  <List.Item
+                    actions={
+                      canWrite && a.status === "待处置"
+                        ? [
+                            <Button
+                              key="dispose"
+                              type="link"
+                              size="small"
+                              icon={<SafetyCertificateOutlined />}
+                              onClick={() =>
+                                setDisposingAlert({ id: a.id, level: a.level, reason: a.reason, enterpriseName: vm.name })
+                              }
+                            >
+                              处置
+                            </Button>,
+                          ]
+                        : undefined
+                    }
+                  >
+                    <Space wrap>
+                      <Tag color={ALERT_LEVEL_COLOR[a.level]}>{a.level}</Tag>
+                      <Text>{a.reason}</Text>
+                      <Tag color={a.status === "待处置" ? "orange" : "green"}>{a.status}</Tag>
+                    </Space>
+                  </List.Item>
+                )}
+              />
             </Card>
           )}
           <Card
@@ -358,6 +398,7 @@ export default function EnterpriseDetailView({ vm, canWrite, canDelete }: { vm: 
 
       <RiskEventFormModal open={modalOpen} enterpriseId={vm.id} editing={editing} onClose={() => setModalOpen(false)} />
       <EnterpriseFormModal open={editEntOpen} mode="edit" initial={enterpriseInitial} onClose={() => setEditEntOpen(false)} />
+      <AlertDisposeModal open={!!disposingAlert} alert={disposingAlert} onClose={() => setDisposingAlert(null)} />
     </div>
   );
 }
