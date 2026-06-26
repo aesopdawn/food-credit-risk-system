@@ -31,6 +31,8 @@ Node 全栈、单仓库、前后端不分离。
 | 数据库 | SQLite（本地文件 `dev.db`） | — |
 | 大模型 | DeepSeek（`deepseek-chat`，OpenAI 兼容） | — |
 | AI 编排 | Vercel AI SDK（`ai` + `@ai-sdk/react` + `@ai-sdk/deepseek`） | **6.x** |
+| Markdown 渲染 | react-markdown + remark-gfm（共用 `components/Markdown.tsx`） | — |
+| PDF 导出 | jspdf + html2canvas-pro（客户端，研判报告下载，动态 import 按需加载） | — |
 | 运行时 | React 19 / Node 24 | — |
 
 > ⚠️ Next 16 / antd 6 / AI SDK 6 / Prisma 7 都比常见教程新。写相关代码前，遇到不确定的 API **先查 `node_modules/<pkg>/dist/docs` 或 `.d.ts` 核实**，不要凭旧版记忆写。Next 自带文档在 `node_modules/next/dist/docs/`。
@@ -105,8 +107,8 @@ prisma/
 
 ## 8. AI 设计（两处用法）
 
-1. **对话 Agent**（`app/api/chat/route.ts`）：`streamText` + 工具调用，`stopWhen: stepCountIs(6)`。工具：`listEnterprises` / `getEnterpriseProfile` / `explainRating` / `getStatistics`，全部查真实数据库再作答。前端 `components/ChatWidget.tsx` 用 `useChat` + `DefaultChatTransport`。
-2. **研判报告**（`app/api/report/route.ts`）：`generateText` 基于企业数据生成自然语言研判报告。
+1. **对话 Agent**（`app/api/chat/route.ts`）：`streamText` + 工具调用，`stopWhen: stepCountIs(6)`。工具：`listEnterprises` / `getEnterpriseProfile` / `explainRating` / `getStatistics`，全部查真实数据库再作答。前端 `components/ChatWidget.tsx` 用 `useChat` + `DefaultChatTransport`，助手消息经 `components/Markdown.tsx` 渲染。
+2. **研判报告**（`app/api/report/route.ts`）：`generateText` 基于企业数据生成自然语言研判报告。前端企业详情页生成时有 loading 态，结果经 `Markdown` 渲染；点「下载 PDF」用 jspdf + html2canvas-pro 把离屏 `.pdf-doc` 文档截图导出，浏览器直接下载（PDF 相关库动态 import）。
 
 > 两个 AI 路由入口都先 `getSession()` 校验登录，未登录返回 401（避免未授权调用消耗 DeepSeek 配额）。
 

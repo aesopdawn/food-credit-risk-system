@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { Button, Drawer, Input, Avatar, Tag, Empty, Spin } from "antd";
 import { RobotOutlined, SendOutlined, UserOutlined, CommentOutlined } from "@ant-design/icons";
+import Markdown from "./Markdown";
 
 const SUGGESTIONS = [
   "列出所有 D 级高风险企业",
@@ -99,7 +100,7 @@ export default function ChatWidget() {
                     padding: "8px 12px",
                     borderRadius: 8,
                     maxWidth: 320,
-                    whiteSpace: "pre-wrap",
+                    whiteSpace: isUser ? "pre-wrap" : undefined,
                     wordBreak: "break-word",
                   }}
                 >
@@ -108,7 +109,8 @@ export default function ChatWidget() {
                       🔍 正在查询系统数据…
                     </Tag>
                   )}
-                  {text}
+                  {/* 用户消息纯文本；助手消息渲染 Markdown */}
+                  {isUser ? text : text && <Markdown>{text}</Markdown>}
                 </div>
               </div>
             );

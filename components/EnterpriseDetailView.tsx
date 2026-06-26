@@ -1,8 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Card, Descriptions, Tag, Row, Col, Progress, Timeline, Button, Typography, Alert, Space, List, Popconfirm, App } from "antd";
-import { RobotOutlined, SafetyCertificateOutlined, PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { Card, Descriptions, Tag, Row, Col, Progress, Timeline, Button, Typography, Alert, Space, List, Popconfirm, Spin, App } from "antd";
+import { RobotOutlined, SafetyCertificateOutlined, PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined, DownloadOutlined } from "@ant-design/icons";
+import Markdown from "./Markdown";
 import { LEVEL_META, type RiskLevel, type ScoreResult } from "@/lib/scoring";
 import { deleteRiskEvent, reRateAction } from "@/app/actions/events";
 import { deleteEnterprise } from "@/app/actions/enterprises";
@@ -11,7 +12,7 @@ import EnterpriseFormModal, { type EnterpriseFormInitial } from "./EnterpriseFor
 import AlertDisposeModal, { type DisposingAlert } from "./AlertDisposeModal";
 import EChart from "./EChart";
 
-const { Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 const EVENT_META: Record<string, { label: string; color: string }> = {
   PENALTY: { label: "行政处罚", color: "red" },
@@ -59,8 +60,11 @@ export default function EnterpriseDetailView({ vm, canWrite, canDelete }: { vm: 
   const { message } = App.useApp();
   const router = useRouter();
   const [report, setReport] = useState<string>();
+  const [reportAt, setReportAt] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [rerating, setRerating] = useState(false);
+  const pdfRef = useRef<HTMLDivElement>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<EditingEvent | null>(null);
   const [editEntOpen, setEditEntOpen] = useState(false);
@@ -102,10 +106,44 @@ export default function EnterpriseDetailView({ vm, canWrite, canDelete }: { vm: 
       });
       const data = await res.json();
       setReport(data.report ?? data.error ?? "生成失败");
+      setReportAt(new Date().toLocaleString("zh-CN", { hour12: false }));
     } catch {
       setReport("请求失败，请检查 DeepSeek API Key 是否已配置");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 把渲染好的研判报告（离屏 .pdf-doc 容器）截图并导出为 PDF，浏览器直接下载
+  const downloadPdf = async () => {
+    if (!pdfRef.current) return;
+    setPdfLoading(true);
+    try {
+      const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
+        import("jspdf"),
+        import("html2canvas-pro"),
+      ]);
+      const canvas = await html2canvas(pdfRef.current, { scale: 2, backgroundColor: "#ffffff" });
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageW = 210;
+      const pageH = 297;
+      const imgH = (canvas.height * pageW) / canvas.width;
+      let heightLeft = imgH;
+      let position = 0;
+      pdf.addImage(imgData, "JPEG", 0, position, pageW, imgH);
+      heightLeft -= pageH;
+      while (heightLeft > 0) {
+        position -= pageH;
+        pdf.addPage();
+        pdf.addImage(imgData, "JPEG", 0, position, pageW, imgH);
+        heightLeft -= pageH;
+      }
+      pdf.save(`${vm.name}-信用风险研判报告.pdf`);
+    } catch {
+      message.error("PDF 生成失败，请重试");
+    } finally {
+      setPdfLoading(false);
     }
   };
 
@@ -249,13 +287,48 @@ export default function EnterpriseDetailView({ vm, canWrite, canDelete }: { vm: 
             )}
             <div style={{ marginTop: 16 }}>
               <Button type="primary" icon={<RobotOutlined />} loading={loading} onClick={genReport} block>
-                AI 生成信用风险研判报告
+                {loading ? "AI 正在研判生成中…" : "AI 生成信用风险研判报告"}
               </Button>
             </div>
-            {report && (
-              <Card size="small" style={{ marginTop: 12, background: "#fafafa" }} title="AI 研判报告">
-                <Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>{report}</Paragraph>
+            {loading && (
+              <div style={{ textAlign: "center", padding: "20px 0", color: "#999" }}>
+                <Spin />
+                <div style={{ marginTop: 8, fontSize: 13 }}>正在基于企业数据生成研判报告…</div>
+              </div>
+            )}
+            {report && !loading && (
+              <Card
+                size="small"
+                style={{ marginTop: 12, background: "#fafafa" }}
+                title="AI 研判报告"
+                extra={
+                  <Button size="small" icon={<DownloadOutlined />} loading={pdfLoading} onClick={downloadPdf}>
+                    下载 PDF
+                  </Button>
+                }
+              >
+                <Markdown>{report}</Markdown>
               </Card>
+            )}
+            {/* 离屏渲染的 PDF 文档容器：html2canvas 截图 → jsPDF 下载 */}
+            {report && !loading && (
+              <div ref={pdfRef} className="pdf-doc" style={{ position: "fixed", left: -10000, top: 0 }}>
+                <div className="pdf-title">食品企业信用风险研判报告</div>
+                <div className="pdf-sub">{vm.name} · 生成时间 {reportAt}</div>
+                <div className="pdf-meta">
+                  企业名称：{vm.name}
+                  <br />
+                  统一社会信用代码：{vm.uscc}
+                  <br />
+                  行业 / 区县：{vm.industry} / {vm.region}
+                  <br />
+                  当前信用等级：{vm.level} 级（{vm.score?.toFixed(1) ?? "-"} 分）
+                </div>
+                <Markdown>{report}</Markdown>
+                <div className="pdf-footer">
+                  本报告由「食品企业信用风险分类管理系统」AI 智能研判助手生成，仅供监管参考。
+                </div>
+              </div>
             )}
           </Card>
 
