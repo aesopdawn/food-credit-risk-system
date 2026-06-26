@@ -36,6 +36,17 @@ const NAME_SUFFIX_BY_INDUSTRY: Record<string, string[]> = {
 };
 
 type EvtTemplate = { type: string; titles: string[]; sevRange: [number, number] };
+// 待写库的事件数据（与 RiskEvent 标量字段对应，id/createdAt 自动生成）
+type SeedEventData = {
+  enterpriseId: string;
+  type: string;
+  title: string;
+  severity: number;
+  isVeto: boolean;
+  occurredAt: Date;
+  source: string;
+  payload: string | null;
+};
 const NEGATIVE_TEMPLATES: EvtTemplate[] = [
   { type: "PENALTY", titles: ["未取得许可证从事食品经营", "经营超过保质期的食品", "食品标签不符合规定", "使用不合格食品原料", "未按规定进行进货查验记录"], sevRange: [2, 5] },
   { type: "INSPECTION", titles: ["抽检发现菌落总数超标", "抽检发现食品添加剂超范围使用", "抽检发现农药残留超标", "现场检查环境卫生不达标", "从业人员未持有效健康证"], sevRange: [1, 4] },
@@ -90,7 +101,7 @@ async function main() {
     });
 
     // 生成事件
-    const events: { data: any; scoring: ScoringEvent }[] = [];
+    const events: { data: SeedEventData; scoring: ScoringEvent }[] = [];
     const negCount = rand(7); // 0-6 个负面事件
     for (let k = 0; k < negCount; k++) {
       const tpl = pick(NEGATIVE_TEMPLATES);
@@ -120,14 +131,22 @@ async function main() {
       });
     }
 
-    // 部分企业有信用修复（加分）
-    if (chance(0.3)) {
+    // 部分有负面记录的企业做了信用修复（针对其某一类被扣分维度回补加分）
+    const negTypes = [
+      ...new Set(
+        events
+          .filter((e) => ["PENALTY", "INSPECTION", "COMPLAINT"].includes(e.data.type))
+          .map((e) => e.data.type as string),
+      ),
+    ];
+    if (negTypes.length && chance(0.4)) {
       const occurredAt = daysAgo(400);
       const title = pick(REPAIR_TITLES);
       const severity = 2 + rand(3);
+      const repairTarget = pick(negTypes); // 修复对象 = 该企业真实被扣分的某一类维度
       events.push({
-        data: { enterpriseId: enterprise.id, type: "REPAIR", title, severity, isVeto: false, occurredAt, source: "信用修复系统", payload: JSON.stringify({ 修复方式: "主动整改" }) },
-        scoring: { type: "REPAIR", title, severity, isVeto: false, occurredAt },
+        data: { enterpriseId: enterprise.id, type: "REPAIR", title, severity, isVeto: false, occurredAt, source: "信用修复系统", payload: JSON.stringify({ 修复方式: "主动整改", 修复对象: repairTarget }) },
+        scoring: { type: "REPAIR", title, severity, isVeto: false, occurredAt, repairTarget },
       });
     }
 

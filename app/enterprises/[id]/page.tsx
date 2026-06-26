@@ -19,13 +19,13 @@ export default async function EnterpriseDetailPage({
   const writable = canWrite(user?.role);
   const admin = isAdmin(user?.role);
 
-  // 从事件 payload(JSON 文本) 中提取备注，供编辑回填
-  const remarkOf = (payload: string | null): string | undefined => {
-    if (!payload) return undefined;
+  // 从事件 payload(JSON 文本) 中提取字段，供编辑回填
+  const payloadOf = (payload: string | null): { 备注?: string; 修复对象?: string } => {
+    if (!payload) return {};
     try {
-      return (JSON.parse(payload) as { 备注?: string }).备注;
+      return JSON.parse(payload) as { 备注?: string; 修复对象?: string };
     } catch {
-      return undefined;
+      return {};
     }
   };
 
@@ -45,16 +45,20 @@ export default async function EnterpriseDetailPage({
     score: d.latestRating?.score ?? null,
     computedAt: d.latestRating ? new Date(d.latestRating.computedAt).toISOString().slice(0, 10) : null,
     breakdown: d.breakdown,
-    events: d.events.map((e) => ({
-      id: e.id,
-      type: e.type,
-      title: e.title,
-      severity: e.severity,
-      isVeto: e.isVeto,
-      source: e.source,
-      occurredAt: new Date(e.occurredAt).toISOString().slice(0, 10),
-      remark: remarkOf(e.payload),
-    })),
+    events: d.events.map((e) => {
+      const p = payloadOf(e.payload);
+      return {
+        id: e.id,
+        type: e.type,
+        title: e.title,
+        severity: e.severity,
+        isVeto: e.isVeto,
+        source: e.source,
+        occurredAt: new Date(e.occurredAt).toISOString().slice(0, 10),
+        remark: p.备注,
+        repairTarget: p.修复对象,
+      };
+    }),
     // 评级历史（升序），用于评级走势图；保留 level 以便着色/提示
     ratingHistory: [...d.ratings]
       .reverse()

@@ -14,6 +14,7 @@ export type EditingEvent = {
   source: string;
   occurredAt: string;
   remark?: string;
+  repairTarget?: string;
 };
 
 const TYPE_OPTIONS = Object.entries(EVENT_TYPES).map(([value, label]) => ({ value, label }));
@@ -23,6 +24,19 @@ const SEVERITY_OPTIONS = [
   { value: 3, label: "3 · 一般" },
   { value: 4, label: "4 · 严重" },
   { value: 5, label: "5 · 特别严重" },
+];
+// 信用修复：用“修复力度”代替“严重程度”，恢复分值 = 力度 × 2
+const REPAIR_STRENGTH_OPTIONS = [
+  { value: 1, label: "1 · 轻微修复（+2 分）" },
+  { value: 2, label: "2 · 部分修复（+4 分）" },
+  { value: 3, label: "3 · 一般修复（+6 分）" },
+  { value: 4, label: "4 · 较大修复（+8 分）" },
+  { value: 5, label: "5 · 完全修复（+10 分）" },
+];
+const REPAIR_TARGET_OPTIONS = [
+  { value: "PENALTY", label: "行政处罚" },
+  { value: "INSPECTION", label: "抽查检查" },
+  { value: "COMPLAINT", label: "投诉举报" },
 ];
 const NEGATIVE_TYPES = ["PENALTY", "INSPECTION", "COMPLAINT"];
 
@@ -52,6 +66,7 @@ export default function RiskEventFormModal({
         occurredAt: dayjs(editing.occurredAt),
         source: editing.source,
         remark: editing.remark,
+        repairTarget: editing.repairTarget,
       });
     } else {
       form.resetFields();
@@ -61,6 +76,7 @@ export default function RiskEventFormModal({
 
   const type = Form.useWatch("type", form);
   const isNegative = NEGATIVE_TYPES.includes(type);
+  const isRepair = type === "REPAIR";
 
   const onOk = async () => {
     let v: {
@@ -71,6 +87,7 @@ export default function RiskEventFormModal({
       occurredAt: dayjs.Dayjs;
       source: string;
       remark?: string;
+      repairTarget?: string;
     };
     try {
       v = await form.validateFields();
@@ -87,6 +104,7 @@ export default function RiskEventFormModal({
       occurredAt: v.occurredAt.toISOString(),
       source: v.source,
       remark: v.remark?.trim() || undefined,
+      repairTarget: isRepair ? (v.repairTarget as EventInputType["repairTarget"]) : undefined,
     };
     const res = editing ? await updateRiskEvent(editing.id, payload) : await addRiskEvent(payload);
     setSubmitting(false);
@@ -114,10 +132,20 @@ export default function RiskEventFormModal({
           <Select options={TYPE_OPTIONS} />
         </Form.Item>
         <Form.Item name="title" label="事由 / 标题" rules={[{ required: true, message: "请填写事由" }]}>
-          <Input maxLength={200} placeholder="如：抽检发现菌落总数超标" />
+          <Input maxLength={200} placeholder={isRepair ? "如：已完成整改并通过复查" : "如：抽检发现菌落总数超标"} />
         </Form.Item>
-        <Form.Item name="severity" label="严重程度" rules={[{ required: true }]}>
-          <Select options={SEVERITY_OPTIONS} />
+        {isRepair && (
+          <Form.Item
+            name="repairTarget"
+            label="修复对象"
+            rules={[{ required: true, message: "请选择修复对象" }]}
+            tooltip="信用修复会把分数加回到所选维度（封顶不超过该维度满分），不删除原扣分记录"
+          >
+            <Select options={REPAIR_TARGET_OPTIONS} placeholder="修复哪一类被扣分的问题" />
+          </Form.Item>
+        )}
+        <Form.Item name="severity" label={isRepair ? "修复力度" : "严重程度"} rules={[{ required: true }]}>
+          <Select options={isRepair ? REPAIR_STRENGTH_OPTIONS : SEVERITY_OPTIONS} />
         </Form.Item>
         <Form.Item name="occurredAt" label="发生时间" rules={[{ required: true, message: "请选择发生时间" }]}>
           <DatePicker style={{ width: "100%" }} disabledDate={(d) => d != null && d.isAfter(dayjs(), "day")} />

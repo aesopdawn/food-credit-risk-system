@@ -32,6 +32,7 @@ type EventVM = {
   source: string;
   occurredAt: string;
   remark?: string;
+  repairTarget?: string;
 };
 
 type VM = {
@@ -122,6 +123,7 @@ export default function EnterpriseDetailView({ vm, canWrite, canDelete }: { vm: 
       source: e.source,
       occurredAt: e.occurredAt,
       remark: e.remark,
+      repairTarget: e.repairTarget,
     });
     setModalOpen(true);
   };
@@ -281,6 +283,15 @@ export default function EnterpriseDetailView({ vm, canWrite, canDelete }: { vm: 
                       ))}
                     </div>
                   )}
+                  {dim.repairs?.length > 0 && (
+                    <div style={{ fontSize: 12, color: "#52c41a" }}>
+                      {dim.repairs.map((x, i) => (
+                        <div key={i}>
+                          · 信用修复：{x.title}（+{x.points}{x.occurredAt ? `，${x.occurredAt}` : ""}）
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </Card>
@@ -383,7 +394,7 @@ export default function EnterpriseDetailView({ vm, canWrite, canDelete }: { vm: 
                           )}
                         </div>
                         <div style={{ color: "#999", fontSize: 12, marginTop: 2 }}>
-                          严重度 {e.severity} · {e.occurredAt} · 来源：{e.source}
+                          {e.type === "REPAIR" ? "修复力度" : "严重度"} {e.severity} · {e.occurredAt} · 来源：{e.source}
                         </div>
                         {e.remark && <div style={{ color: "#666", fontSize: 12, marginTop: 2 }}>备注：{e.remark}</div>}
                       </div>

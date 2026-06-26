@@ -15,15 +15,25 @@ export async function reRateEnterprise(enterpriseId: string): Promise<ScoreResul
   if (!e) return null;
 
   const result = computeScore(
-    e.events.map(
-      (ev): ScoringEvent => ({
+    e.events.map((ev): ScoringEvent => {
+      // 信用修复事件从 payload(JSON) 中解析“修复对象”维度，传给评分引擎
+      let repairTarget: string | undefined;
+      if (ev.type === "REPAIR" && ev.payload) {
+        try {
+          repairTarget = (JSON.parse(ev.payload) as { 修复对象?: string }).修复对象;
+        } catch {
+          repairTarget = undefined;
+        }
+      }
+      return {
         type: ev.type,
         title: ev.title,
         severity: ev.severity,
         isVeto: ev.isVeto,
         occurredAt: ev.occurredAt,
-      }),
-    ),
+        repairTarget,
+      };
+    }),
     e.status,
   );
 

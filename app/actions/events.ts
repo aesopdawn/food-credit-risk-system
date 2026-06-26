@@ -18,16 +18,23 @@ async function denyIfReadOnly(): Promise<{ ok: false; error: string } | null> {
 
 const NEGATIVE_TYPES = ["PENALTY", "INSPECTION", "COMPLAINT"] as const;
 
-const EventInput = z.object({
-  enterpriseId: z.string().min(1),
-  type: z.enum(["PENALTY", "INSPECTION", "COMPLAINT", "REPAIR", "LICENSE"]),
-  title: z.string().trim().min(1, "请填写事由").max(200),
-  severity: z.number().int().min(1).max(5),
-  isVeto: z.boolean().default(false),
-  occurredAt: z.string().min(1, "请选择发生时间"),
-  source: z.string().trim().min(1, "请填写数据来源").max(100),
-  remark: z.string().trim().max(500).optional(),
-});
+const EventInput = z
+  .object({
+    enterpriseId: z.string().min(1),
+    type: z.enum(["PENALTY", "INSPECTION", "COMPLAINT", "REPAIR", "LICENSE"]),
+    title: z.string().trim().min(1, "请填写事由").max(200),
+    severity: z.number().int().min(1).max(5),
+    isVeto: z.boolean().default(false),
+    occurredAt: z.string().min(1, "请选择发生时间"),
+    source: z.string().trim().min(1, "请填写数据来源").max(100),
+    remark: z.string().trim().max(500).optional(),
+    // 信用修复(REPAIR)的修复对象：回补哪个被扣分的维度
+    repairTarget: z.enum(["PENALTY", "INSPECTION", "COMPLAINT"]).optional(),
+  })
+  .refine((d) => d.type !== "REPAIR" || !!d.repairTarget, {
+    message: "信用修复请选择修复对象",
+    path: ["repairTarget"],
+  });
 
 export type EventInputType = z.input<typeof EventInput>;
 type ActionResult =
@@ -44,6 +51,9 @@ function revalidate(enterpriseId: string) {
 /** 把表单输入归一化为可写库的数据（含一票否决仅对负面事件生效的约束）。 */
 function toEventData(d: z.infer<typeof EventInput>) {
   const isVeto = (NEGATIVE_TYPES as readonly string[]).includes(d.type) ? d.isVeto : false;
+  const payloadObj: Record<string, string> = {};
+  if (d.remark) payloadObj.备注 = d.remark;
+  if (d.type === "REPAIR" && d.repairTarget) payloadObj.修复对象 = d.repairTarget;
   return {
     type: d.type,
     title: d.title,
@@ -51,7 +61,7 @@ function toEventData(d: z.infer<typeof EventInput>) {
     isVeto,
     occurredAt: new Date(d.occurredAt),
     source: d.source,
-    payload: d.remark ? JSON.stringify({ 备注: d.remark }) : null,
+    payload: Object.keys(payloadObj).length ? JSON.stringify(payloadObj) : null,
   };
 }
 
