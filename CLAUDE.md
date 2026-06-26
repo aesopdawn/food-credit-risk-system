@@ -54,6 +54,7 @@ npx prisma studio    # 可视化查看数据库
 - `.env.local`（**被 .gitignore 排除，含密钥**）：`DEEPSEEK_API_KEY=...`。
 - `.env.example`：模板，新克隆者复制为 `.env.local` 填入自己的 key。
 - 克隆后首次运行：`npm install`（postinstall 自动 `prisma generate`）→ `npx prisma migrate dev` → `npm run seed` → 配置 `.env.local` → `npm run dev`。
+- **拉取更新后（已 clone 过）**：`git pull` → `npm install`（可能有新依赖）→ `npx prisma migrate dev`（应用新迁移，**表结构变更时必须**，否则相关页面查询会报"列不存在"）→ 视情况 `npm run seed`（评分规则变更后旧评级是陈旧的，需重建才能看到新效果）→ `npm run dev`。
 
 ## 5. 目录结构
 
@@ -75,7 +76,7 @@ app/
     chat/route.ts         AI 对话 Agent（流式 + 工具调用；入口校验登录）
     report/route.ts       AI 研判报告（非流式 generateText；入口校验登录）
 middleware.ts             路由保护：未登录跳 /login（用 lib/auth 验签，edge 运行）
-components/               全部 'use client'：视图 + 图表(EChart) + 表单弹窗 + 对话窗(ChatWidget)
+components/               全部 'use client'：视图 + 图表(EChart) + 表单弹窗 + 对话窗(ChatWidget) + Markdown 渲染(Markdown.tsx) + 预警处置弹窗(AlertDisposeModal)
 lib/
   db.ts                  Prisma client 单例（driver adapter）
   scoring.ts             ⭐ 评分引擎（纯函数、确定性、可解释）
@@ -93,7 +94,8 @@ prisma/
 ## 6. 数据模型（`prisma/schema.prisma`）
 
 - `Enterprise` 企业档案 · `RiskEvent` 涉企事件（统一事件表）· `RatingRecord` 评级记录（保留历史）· `Alert` 预警 · `User` 用户。
-- **SQLite 无 JSONB**：`RiskEvent.payload`、`RatingRecord.breakdown` 用 `String` 存 JSON 文本，应用层 `JSON.parse`。
+- `Alert` 含**处置闭环字段**：`status`(待处置/已处置) + `dispositionType`/`disposition`/`handledBy`/`handledAt`（处置留痕，见 `app/actions/alerts.ts`）。
+- **SQLite 无 JSONB**：`RiskEvent.payload`、`RatingRecord.breakdown` 用 `String` 存 JSON 文本，应用层 `JSON.parse`；信用修复事件的 `payload` 还存 `修复对象` 维度（供评分引擎回补加分）。
 
 ## 7. 评分引擎（`lib/scoring.ts`）—— 核心设计
 
