@@ -36,6 +36,17 @@ const NAME_SUFFIX_BY_INDUSTRY: Record<string, string[]> = {
 };
 
 type EvtTemplate = { type: string; titles: string[]; sevRange: [number, number] };
+type RiskEventSeedData = {
+  enterpriseId: string;
+  type: string;
+  title: string;
+  severity: number;
+  isVeto: boolean;
+  occurredAt: Date;
+  source: string;
+  payload: string | null;
+};
+
 const NEGATIVE_TEMPLATES: EvtTemplate[] = [
   { type: "PENALTY", titles: ["未取得许可证从事食品经营", "经营超过保质期的食品", "食品标签不符合规定", "使用不合格食品原料", "未按规定进行进货查验记录"], sevRange: [2, 5] },
   { type: "INSPECTION", titles: ["抽检发现菌落总数超标", "抽检发现食品添加剂超范围使用", "抽检发现农药残留超标", "现场检查环境卫生不达标", "从业人员未持有效健康证"], sevRange: [1, 4] },
@@ -90,7 +101,7 @@ async function main() {
     });
 
     // 生成事件
-    const events: { data: any; scoring: ScoringEvent }[] = [];
+    const events: { data: RiskEventSeedData; scoring: ScoringEvent }[] = [];
     const negCount = rand(7); // 0-6 个负面事件
     for (let k = 0; k < negCount; k++) {
       const tpl = pick(NEGATIVE_TEMPLATES);
