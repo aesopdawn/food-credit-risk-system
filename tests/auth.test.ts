@@ -35,6 +35,17 @@ describe("session token helpers", () => {
     assert.equal(await verifySessionToken(null), null);
     assert.equal(await verifySessionToken("not-a-valid-token"), null);
   });
+
+  it("rejects expired session tokens", async () => {
+    const token = await createSessionToken(user);
+    const originalNow = Date.now;
+    try {
+      Date.now = () => originalNow() + 8 * 24 * 60 * 60 * 1000;
+      assert.equal(await verifySessionToken(token), null);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
 });
 
 describe("role helpers", () => {

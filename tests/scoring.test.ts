@@ -46,6 +46,46 @@ describe("computeScore", () => {
     assert.match(result.topRisks[0], /经营超过保质期的食品/);
   });
 
+  it("maps exact threshold scores to the expected risk levels", () => {
+    assert.equal(
+      computeScore([{ type: "PENALTY", title: "严重行政处罚", severity: 5, isVeto: false, occurredAt: today() }]).level,
+      "A",
+    );
+    assert.equal(
+      computeScore([
+        { type: "PENALTY", title: "行政处罚一", severity: 5, isVeto: false, occurredAt: today() },
+        { type: "PENALTY", title: "行政处罚二", severity: 5, isVeto: false, occurredAt: today() },
+      ]).level,
+      "B",
+    );
+    assert.equal(
+      computeScore([
+        { type: "PENALTY", title: "行政处罚一", severity: 5, isVeto: false, occurredAt: today() },
+        { type: "PENALTY", title: "行政处罚二", severity: 5, isVeto: false, occurredAt: today() },
+        { type: "COMPLAINT", title: "严重投诉举报", severity: 5, isVeto: false, occurredAt: today() },
+      ]).level,
+      "C",
+    );
+    assert.equal(
+      computeScore([
+        { type: "PENALTY", title: "行政处罚一", severity: 5, isVeto: false, occurredAt: today() },
+        { type: "PENALTY", title: "行政处罚二", severity: 5, isVeto: false, occurredAt: today() },
+        { type: "INSPECTION", title: "严重抽查问题", severity: 5, isVeto: false, occurredAt: today() },
+      ]).level,
+      "D",
+    );
+  });
+
+  it("deducts base score for cancelled or revoked enterprises", () => {
+    const cancelled = computeScore([], "注销");
+    const revoked = computeScore([], "吊销");
+
+    assert.equal(cancelled.score, 95);
+    assert.equal(cancelled.breakdown.find((dim) => dim.key === "BASE")?.score, 5);
+    assert.equal(revoked.score, 90);
+    assert.equal(revoked.breakdown.find((dim) => dim.key === "BASE")?.score, 0);
+  });
+
   it("applies time decay to older risk events", () => {
     const result = computeScore([
       { type: "PENALTY", title: "一年以上行政处罚", severity: 5, isVeto: false, occurredAt: daysAgo(400) },
@@ -54,6 +94,36 @@ describe("computeScore", () => {
     assert.equal(result.score, 91);
     assert.equal(result.level, "A");
     assert.equal(result.breakdown.find((dim) => dim.key === "PENALTY")?.deductions[0]?.points, 9);
+  });
+
+  it("floors dimension scores at zero when deductions exceed the dimension full score", () => {
+    const result = computeScore(
+      Array.from({ length: 4 }, (_, index) => ({
+        type: "PENALTY",
+        title: `严重行政处罚${index + 1}`,
+        severity: 5,
+        isVeto: false,
+        occurredAt: today(),
+      })),
+    );
+    const penalty = result.breakdown.find((dim) => dim.key === "PENALTY");
+
+    assert.equal(penalty?.score, 0);
+    assert.equal(result.score, 65);
+    assert.equal(result.level, "C");
+    assert.deepEqual(
+      penalty?.deductions.map((item) => item.points),
+      [15, 15, 5],
+    );
+  });
+
+  it("keeps credit repair capped at the credit dimension full score", () => {
+    const result = computeScore([
+      { type: "REPAIR", title: "完成信用修复", severity: 5, isVeto: false, occurredAt: today() },
+    ]);
+
+    assert.equal(result.score, 100);
+    assert.equal(result.breakdown.find((dim) => dim.key === "CREDIT")?.score, 10);
   });
 
   it("forces D level and caps score when veto is triggered", () => {
