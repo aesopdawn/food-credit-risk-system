@@ -2,8 +2,6 @@
 
 面向**市场监管**场景的食品企业信用风险分类管理系统：归集企业基础信息、行政处罚、抽查检查、投诉举报、信用修复等多维涉企数据，通过**确定性评分引擎**自动完成企业信用风险 **A/B/C/D 四级**动态评级，并提供风险监测、动态预警与处置闭环、分级监管、数据统计、台账管理，以及一个**对话式 AI 智能研判助手**。
 
-> 📖 功能设计详见 [系统功能设计.md](系统功能设计.md)；开发约定见 [CLAUDE.md](CLAUDE.md)。
-
 技术栈：Next.js 16（App Router）· React 19 · Ant Design 6 · Prisma 7 + SQLite · ECharts 6 · Vercel AI SDK 6 + DeepSeek · react-markdown（Markdown 渲染）· jspdf + html2canvas-pro（PDF 导出）。
 
 ---
